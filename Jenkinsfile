@@ -58,11 +58,11 @@ pipeline {
                             usernameVariable: 'USER',
                             passwordVariable: 'PASS'
                         )]) {
-                            sh '''
+                            sh """
                               echo "$PASS" | docker login -u "$USER" --password-stdin
-                              docker build -t $BACKEND_IMAGE backend
+                              docker build -t $BACKEND_IMAGE ./backend
                               docker push $BACKEND_IMAGE
-                            '''
+                            """
                         }
                     }
                 }
@@ -74,11 +74,11 @@ pipeline {
                             usernameVariable: 'USER',
                             passwordVariable: 'PASS'
                         )]) {
-                            sh '''
+                            sh """
                               echo "$PASS" | docker login -u "$USER" --password-stdin
-                              docker build -t $FRONTEND_IMAGE frontend
+                              docker build -t $FRONTEND_IMAGE ./frontend
                               docker push $FRONTEND_IMAGE
-                            '''
+                            """
                         }
                     }
                 }
