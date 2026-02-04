@@ -1,80 +1,216 @@
 pipeline {
-  agent any
+    agent any
 
-  environment {
-    DOCKERHUB_REPO      = "vikasabhimanyu"
-    DOCKER_CREDENTIALS = "dockerhub-creds"
-    KUBECONFIG_CRED    = "kubeconfig-creds"
-  }
+    environment {
+        DOCKER_USER = "vikasabhimanyu"
+        DOCKER_CRED = "dockerhub-creds"
+        KUBECONFIG  = credentials('kubeconfig-creds')
 
-  stages {
+        GIT_SHA = ''
+        IMAGE_TAG = ''
 
-    stage('Determine Environment') {
-      steps {
-        script {
-          if (env.BRANCH_NAME == 'DEV') {
-            env.ENV = 'dev'
-          } else if (env.BRANCH_NAME == 'TESTING') {
-            env.ENV = 'testing'
-          } else if (env.BRANCH_NAME == 'PRODUCTION') {
-            env.ENV = 'production'
-          }
+        BACKEND_IMAGE = ''
+        FRONTEND_IMAGE = ''
+        ENV = ''
+        NAMESPACE = ''
+    }
 
-          if (!env.ENV) {
-            error("Invalid branch for deployment: ${env.BRANCH_NAME}")
-          }
+    stages {
+
+        stage('Determine Environment') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'DEV') {
+                        ENV = 'dev'
+                        NAMESPACE = 'dev'
+                    } else if (env.BRANCH_NAME == 'TESTING') {
+                        ENV = 'testing'
+                        NAMESPACE = 'testing'
+                    } else if (env.BRANCH_NAME == 'PRODUCTION') {
+                        ENV = 'production'
+                        NAMESPACE = 'production'
+                    } else {
+                        error "Unsupported branch: ${env.BRANCH_NAME}"
+                    }
+
+                    GIT_SHA = sh(
+                        script: "git rev-parse --short HEAD",
+                        returnStdout: true
+                    ).trim()
+
+                    IMAGE_TAG = "${ENV}-${GIT_SHA}"
+
+                    BACKEND_IMAGE  = "${DOCKER_USER}/backend:${IMAGE_TAG}"
+                    FRONTEND_IMAGE = "${DOCKER_USER}/frontend:${IMAGE_TAG}"
+
+                    echo "Deploying to ${ENV} with tag ${IMAGE_TAG}"
+                }
+            }
         }
-        echo "Deploying to environment: ${env.ENV}"
-      }
-    }
 
-    stage('Checkout') {
-      steps {
-        checkout scm
-      }
-    }
+        stage('Build & Push Images') {
+            parallel {
 
-    stage('Build Docker Images (Parallel)') {
-      agent { label 'ubuntu-1' }
-      steps {
-        parallel(
-          Backend: {
-            sh "docker build -t $DOCKERHUB_REPO/backend:$ENV-$BUILD_NUMBER backend"
-          },
-          Frontend: {
-            sh "docker build -t $DOCKERHUB_REPO/frontend:$ENV-$BUILD_NUMBER frontend"
-          }
-        )
-      }
-    }
+                stage('Backend') {
+                    steps {
+                        withCredentials([usernamePassword(
+                            credentialsId: DOCKER_CRED,
+                            usernameVariable: 'USER',
+                            passwordVariable: 'PASS'
+                        )]) {
+                            sh '''
+                              echo "$PASS" | docker login -u "$USER" --password-stdin
+                              docker build -t $BACKEND_IMAGE backend
+                              docker push $BACKEND_IMAGE
+                            '''
+                        }
+                    }
+                }
 
-    stage('Push Images to DockerHub') {
-      agent { label 'ubuntu-1' }
-      steps {
-        withCredentials([usernamePassword(
-          credentialsId: DOCKER_CREDENTIALS,
-          usernameVariable: 'USER',
-          passwordVariable: 'PASS'
-        )]) {
-          sh """
-          echo $PASS | docker login -u $USER --password-stdin
-          docker push $DOCKERHUB_REPO/backend:$ENV-$BUILD_NUMBER
-          docker push $DOCKERHUB_REPO/frontend:$ENV-$BUILD_NUMBER
-          """
+                stage('Frontend') {
+                    steps {
+                        withCredentials([usernamePassword(
+                            credentialsId: DOCKER_CRED,
+                            usernameVariable: 'USER',
+                            passwordVariable: 'PASS'
+                        )]) {
+                            sh '''
+                              echo "$PASS" | docker login -u "$USER" --password-stdin
+                              docker build -t $FRONTEND_IMAGE frontend
+                              docker push $FRONTEND_IMAGE
+                            '''
+                        }
+                    }
+                }
+
+            }
         }
-      }
-    }
-     stage('Deploy to Kubernetes') {
- 	 agent { label 'ubuntu-2' }
-  	steps {
-    	withCredentials([file(credentialsId: KUBECONFIG_CRED, variable: 'KUBECONFIG')]) {
-      		sh """
-      		kubectl set image deployment/backend backend=$DOCKERHUB_REPO/backend:$ENV-$BUILD_NUMBER -n $ENV
-      		kubectl set image deployment/frontend frontend=$DOCKERHUB_REPO/frontend:$ENV-$BUILD_NUMBER -n $ENV
-      		"""
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                sh """
+                  sed -i 's|IMAGE_BACKEND|$BACKEND_IMAGE|g' k8s/${ENV}/backend-deployment.yaml
+                  sed -i 's|IMAGE_FRONTEND|$FRONTEND_IMAGE|g' k8s/${ENV}/frontend-deployment.yaml
+
+                  kubectl apply -n ${NAMESPACE} -f k8s/${ENV}/
+
+                  kubectl rollout status deployment/backend -n ${NAMESPACE}
+                  kubectl rollout status deployment/frontend -n ${NAMESPACE}
+                """
+            }
         }
-      }
     }
-  }
-}
+
+    post {
+        failure {
+            echo "Deployment failed — check image build or cluster state."
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_USER = "vikasabhimanyu"
+        DOCKER_CRED = "dockerhub-creds"
+        KUBECONFIG  = credentials('kubeconfig-creds')
+
+        GIT_SHA = ''
+        IMAGE_TAG = ''
+
+        BACKEND_IMAGE = ''
+        FRONTEND_IMAGE = ''
+        ENV = ''
+        NAMESPACE = ''
+    }
+
+    stages {
+
+        stage('Determine Environment') {
+            steps {
+                script {
+                    if (env.BRANCH_NAME == 'DEV') {
+                        ENV = 'dev'
+                        NAMESPACE = 'dev'
+                    } else if (env.BRANCH_NAME == 'TESTING') {
+                        ENV = 'testing'
+                        NAMESPACE = 'testing'
+                    } else if (env.BRANCH_NAME == 'PRODUCTION') {
+                        ENV = 'production'
+                        NAMESPACE = 'production'
+                    } else {
+                        error "Unsupported branch: ${env.BRANCH_NAME}"
+                    }
+
+                    GIT_SHA = sh(
+                        script: "git rev-parse --short HEAD",
+                        returnStdout: true
+                    ).trim()
+
+                    IMAGE_TAG = "${ENV}-${GIT_SHA}"
+
+                    BACKEND_IMAGE  = "${DOCKER_USER}/backend:${IMAGE_TAG}"
+                    FRONTEND_IMAGE = "${DOCKER_USER}/frontend:${IMAGE_TAG}"
+
+                    echo "Deploying to ${ENV} with tag ${IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage('Build & Push Images') {
+            parallel {
+
+                stage('Backend') {
+                    steps {
+                        withCredentials([usernamePassword(
+                            credentialsId: DOCKER_CRED,
+                            usernameVariable: 'USER',
+                            passwordVariable: 'PASS'
+                        )]) {
+                            sh '''
+                              echo "$PASS" | docker login -u "$USER" --password-stdin
+                              docker build -t $BACKEND_IMAGE backend
+                              docker push $BACKEND_IMAGE
+                            '''
+                        }
+                    }
+                }
+
+                stage('Frontend') {
+                    steps {
+                        withCredentials([usernamePassword(
+                            credentialsId: DOCKER_CRED,
+                            usernameVariable: 'USER',
+                            passwordVariable: 'PASS'
+                        )]) {
+                            sh '''
+                              echo "$PASS" | docker login -u "$USER" --password-stdin
+                              docker build -t $FRONTEND_IMAGE frontend
+                              docker push $FRONTEND_IMAGE
+                            '''
+                        }
+                    }
+                }
+
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                sh """
+                  sed -i 's|IMAGE_BACKEND|$BACKEND_IMAGE|g' k8s/${ENV}/backend-deployment.yaml
+                  sed -i 's|IMAGE_FRONTEND|$FRONTEND_IMAGE|g' k8s/${ENV}/frontend-deployment.yaml
+
+                  kubectl apply -n ${NAMESPACE} -f k8s/${ENV}/
+
+                  kubectl rollout status deployment/backend -n ${NAMESPACE}
+                  kubectl rollout status deployment/frontend -n ${NAMESPACE}
+                """
+            }
+        }
+    }
+
+    post {
+        failure {
+            echo "Deployment failed — check image build or cluster state."
+        }
+    }
+}        
 
