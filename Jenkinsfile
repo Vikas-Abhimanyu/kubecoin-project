@@ -4,15 +4,7 @@ pipeline {
     environment {
         DOCKER_USER = "vikasabhimanyu"
         DOCKER_CRED = "dockerhub-creds"
-        KUBECONFIG  = credentials('kubeconfig-creds')
-
-        GIT_SHA = ''
-        IMAGE_TAG = ''
-
-        BACKEND_IMAGE = ''
-        FRONTEND_IMAGE = ''
-        ENV = ''
-        NAMESPACE = ''
+        KUBECONFIG_CRED = "kubeconfig-creds"
     }
 
     stages {
@@ -21,89 +13,72 @@ pipeline {
             steps {
                 script {
                     if (env.BRANCH_NAME == 'DEV') {
-                        ENV = 'dev'
-                        NAMESPACE = 'dev'
+                        env.ENV = 'dev'
+                        env.NAMESPACE = 'dev'
                     } else if (env.BRANCH_NAME == 'TESTING') {
-                        ENV = 'testing'
-                        NAMESPACE = 'testing'
+                        env.ENV = 'testing'
+                        env.NAMESPACE = 'testing'
                     } else if (env.BRANCH_NAME == 'PRODUCTION') {
-                        ENV = 'production'
-                        NAMESPACE = 'production'
+                        env.ENV = 'production'
+                        env.NAMESPACE = 'production'
                     } else {
                         error "Unsupported branch: ${env.BRANCH_NAME}"
                     }
 
-                    GIT_SHA = sh(
-                        script: "git rev-parse --short HEAD",
-                        returnStdout: true
-                    ).trim()
+                    env.GIT_SHA = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
 
-                    IMAGE_TAG = "${ENV}-${GIT_SHA}"
+                    env.BACKEND_IMAGE = "${DOCKER_USER}/backend:${env.ENV}-${env.GIT_SHA}"
+                    env.FRONTEND_IMAGE = "${DOCKER_USER}/frontend:${env.ENV}-${env.GIT_SHA}"
 
-                    BACKEND_IMAGE  = "${DOCKER_USER}/backend:${IMAGE_TAG}"
-                    FRONTEND_IMAGE = "${DOCKER_USER}/frontend:${IMAGE_TAG}"
-
-                    echo "Deploying to ${ENV} with tag ${IMAGE_TAG}"
+                    echo "Deploying to ${env.ENV} namespace with images:"
+                    echo "Backend: ${env.BACKEND_IMAGE}"
+                    echo "Frontend: ${env.FRONTEND_IMAGE}"
                 }
             }
         }
 
-        stage('Build & Push Images') {
-            parallel {
-
-                stage('Backend') {
-                    steps {
-                        withCredentials([usernamePassword(
-                            credentialsId: DOCKER_CRED,
-                            usernameVariable: 'USER',
-                            passwordVariable: 'PASS'
-                        )]) {
-                            sh """
-                              echo "$PASS" | docker login -u "$USER" --password-stdin
-                              docker build -t $BACKEND_IMAGE ./backend
-                              docker push $BACKEND_IMAGE
-                            """
-                        }
-                    }
+        stage('Build & Push Backend Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: "${DOCKER_CRED}", usernameVariable: 'DOCKER_USER_VAR', passwordVariable: 'DOCKER_PASS_VAR')]) {
+                    sh """
+                      echo "$DOCKER_PASS_VAR" | docker login -u "$DOCKER_USER_VAR" --password-stdin
+                      docker build -t ${BACKEND_IMAGE} ./backend
+                      docker push ${BACKEND_IMAGE}
+                    """
                 }
+            }
+        }
 
-                stage('Frontend') {
-                    steps {
-                        withCredentials([usernamePassword(
-                            credentialsId: DOCKER_CRED,
-                            usernameVariable: 'USER',
-                            passwordVariable: 'PASS'
-                        )]) {
-                            sh """
-                              echo "$PASS" | docker login -u "$USER" --password-stdin
-                              docker build -t $FRONTEND_IMAGE ./frontend
-                              docker push $FRONTEND_IMAGE
-                            """
-                        }
-                    }
+        stage('Build & Push Frontend Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: "${DOCKER_CRED}", usernameVariable: 'DOCKER_USER_VAR', passwordVariable: 'DOCKER_PASS_VAR')]) {
+                    sh """
+                      echo "$DOCKER_PASS_VAR" | docker login -u "$DOCKER_USER_VAR" --password-stdin
+                      docker build -t ${FRONTEND_IMAGE} ./frontend
+                      docker push ${FRONTEND_IMAGE}
+                    """
                 }
-
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh """
-                  sed -i 's|IMAGE_BACKEND|$BACKEND_IMAGE|g' k8s/${ENV}/backend-deployment.yaml
-                  sed -i 's|IMAGE_FRONTEND|$FRONTEND_IMAGE|g' k8s/${ENV}/frontend-deployment.yaml
-
-                  kubectl apply -n ${NAMESPACE} -f k8s/${ENV}/
-
-                  kubectl rollout status deployment/backend -n ${NAMESPACE}
-                  kubectl rollout status deployment/frontend -n ${NAMESPACE}
-                """
+                withCredentials([file(credentialsId: "${KUBECONFIG_CRED}", variable: 'KUBECONFIG_FILE')]) {
+                    sh """
+                      export KUBECONFIG=$KUBECONFIG_FILE
+                      kubectl set image deployment/backend backend=${BACKEND_IMAGE} -n ${NAMESPACE}
+                      kubectl set image deployment/frontend frontend=${FRONTEND_IMAGE} -n ${NAMESPACE}
+                      kubectl rollout status deployment/backend -n ${NAMESPACE}
+                      kubectl rollout status deployment/frontend -n ${NAMESPACE}
+                    """
+                }
             }
         }
     }
 
     post {
         failure {
-            echo "Deployment failed — check image build or cluster state."
+            echo "Deployment failed. Check build logs and cluster status."
         }
     }
 }
