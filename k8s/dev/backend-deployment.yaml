@@ -4,28 +4,29 @@ metadata:
   name: backend
   labels:
     app: backend
+  namespace: dev
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: backend
-  template:
+  template: 
     metadata:
-      labels:
+      labels: 
         app: backend
     spec:
-      initContainers:
+      initContainers: 
         - name: wait-for-postgres
           image: postgres:15-alpine
           command: ['sh', '-c', 'until pg_isready -h $DB_HOST -U $DB_USER -d $DB_NAME; do echo waiting for database; sleep 2; done;']
-          envFrom:
+          envFrom: 
             - configMapRef:
                 name: kubecoin-config
             - secretRef:
                 name: kubecoin-secrets
       containers:
         - name: backend
-          image: artisantek/kubecoin-backend:1.0
+          image: vikasabhimanyu/backend:1.0
           ports:
             - containerPort: 5000
           envFrom:
@@ -41,3 +42,6 @@ spec:
             limits:
               memory: "256Mi"
               cpu: "250m"
+
+
+
