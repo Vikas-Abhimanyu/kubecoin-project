@@ -36,7 +36,7 @@ spec:
               memory: "128Mi"
       containers:
         - name: backend
-          image: IMAGE_BACKEND
+          image: vikasabhimanyu/backend:dev-<git-sha>
           ports:
             - containerPort: 5000
           envFrom:
