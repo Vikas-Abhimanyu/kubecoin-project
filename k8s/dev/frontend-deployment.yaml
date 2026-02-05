@@ -30,10 +30,10 @@ spec:
           # Resource constraints (Nginx is lightweight)
           resources:
             requests:
-              memory: "64Mi"
-              cpu: "50m"
+              memory: "200Mi"
+              cpu: "150m"
             limits:
-              memory: "128Mi"
-              cpu: "100m"
+              memory: "400Mi"
+              cpu: "300m"
 
 
