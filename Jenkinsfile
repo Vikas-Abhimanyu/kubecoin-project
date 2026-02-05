@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    triggers {
+        githubPush()
+    }
+
     environment {
         DOCKER_USER = "vikasabhimanyu"
         DOCKER_CRED = "dockerhub-creds"
@@ -8,7 +12,6 @@ pipeline {
     }
 
     stages {
-
         stage('Determine Environment') {
             steps {
                 script {
