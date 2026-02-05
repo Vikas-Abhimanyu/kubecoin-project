@@ -40,11 +40,11 @@ pipeline {
         stage('Build & Push Backend Image') {
             steps {
                 withCredentials([usernamePassword(credentialsId: "${DOCKER_CRED}", usernameVariable: 'DOCKER_USER_VAR', passwordVariable: 'DOCKER_PASS_VAR')]) {
-                    sh """
-                      echo "$DOCKER_PASS_VAR" | docker login -u "$DOCKER_USER_VAR" --password-stdin
+                    sh '''
+                      echo $DOCKER_PASS_VAR | docker login -u $DOCKER_USER_VAR --password-stdin
                       docker build -t ${BACKEND_IMAGE} ./backend
                       docker push ${BACKEND_IMAGE}
-                    """
+                    '''
                 }
             }
         }
@@ -52,11 +52,11 @@ pipeline {
         stage('Build & Push Frontend Image') {
             steps {
                 withCredentials([usernamePassword(credentialsId: "${DOCKER_CRED}", usernameVariable: 'DOCKER_USER_VAR', passwordVariable: 'DOCKER_PASS_VAR')]) {
-                    sh """
-                      echo "$DOCKER_PASS_VAR" | docker login -u "$DOCKER_USER_VAR" --password-stdin
+                    sh '''
+                      echo $DOCKER_PASS_VAR | docker login -u $DOCKER_USER_VAR --password-stdin
                       docker build -t ${FRONTEND_IMAGE} ./frontend
                       docker push ${FRONTEND_IMAGE}
-                    """
+                    '''
                 }
             }
         }
@@ -64,13 +64,13 @@ pipeline {
         stage('Deploy to Kubernetes') {
             steps {
                 withCredentials([file(credentialsId: "${KUBECONFIG_CRED}", variable: 'KUBECONFIG_FILE')]) {
-                    sh """
+                    sh '''
                       export KUBECONFIG=$KUBECONFIG_FILE
                       kubectl set image deployment/backend backend=${BACKEND_IMAGE} -n ${NAMESPACE}
                       kubectl set image deployment/frontend frontend=${FRONTEND_IMAGE} -n ${NAMESPACE}
                       kubectl rollout status deployment/backend -n ${NAMESPACE}
                       kubectl rollout status deployment/frontend -n ${NAMESPACE}
-                    """
+                    '''
                 }
             }
         }
