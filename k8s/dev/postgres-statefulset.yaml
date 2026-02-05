@@ -32,11 +32,11 @@ spec:
             # Resource constraints
             resources:
               requests:
-                memory: "500Mi"
-                cpu: "400m"
+                memory: "200Mi"
+                cpu: "200m"
               limits:
-                memory: "700Mi"
-                cpu: "700m"
+                memory: "400Mi"
+                cpu: "300m"
             volumeMounts:
               - name: postgres-storage
                 mountPath: /var/lib/postgresql/data
