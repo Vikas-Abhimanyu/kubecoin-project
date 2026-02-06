@@ -6,8 +6,8 @@ pipeline {
     }
 
     environment {
-        DOCKER_USER = "vikasabhimanyu"
-        DOCKER_CRED = "dockerhub-creds"
+        DOCKER_USER    = "vikasabhimanyu"
+        DOCKER_CRED    = "dockerhub-creds"
         KUBECONFIG_CRED = "kubeconfig-creds"
     }
 
@@ -15,25 +15,29 @@ pipeline {
         stage('Determine Environment') {
             steps {
                 script {
-                    if (env.BRANCH_NAME == 'DEV') {
-                        env.ENV = 'dev'
-                        env.NAMESPACE = 'dev'
-                    } else if (env.BRANCH_NAME == 'TESTING') {
-                        env.ENV = 'testing'
-                        env.NAMESPACE = 'testing'
-                    } else if (env.BRANCH_NAME == 'PRODUCTION') {
-                        env.ENV = 'production'
-                        env.NAMESPACE = 'production'
-                    } else {
-                        error "Unsupported branch: ${env.BRANCH_NAME}"
+                    switch(env.BRANCH_NAME.toLowerCase()) {
+                        case 'dev':
+                            env.ENV = 'dev'
+                            env.NAMESPACE = 'dev'
+                            break
+                        case 'testing':
+                            env.ENV = 'testing'
+                            env.NAMESPACE = 'testing'
+                            break
+                        case 'production':
+                            env.ENV = 'production'
+                            env.NAMESPACE = 'production'
+                            break
+                        default:
+                            error "Unsupported branch: ${env.BRANCH_NAME}"
                     }
 
                     env.GIT_SHA = sh(script: "git rev-parse --short HEAD", returnStdout: true).trim()
 
-                    env.BACKEND_IMAGE = "${DOCKER_USER}/backend:${env.ENV}-${env.GIT_SHA}"
+                    env.BACKEND_IMAGE  = "${DOCKER_USER}/backend:${env.ENV}-${env.GIT_SHA}"
                     env.FRONTEND_IMAGE = "${DOCKER_USER}/frontend:${env.ENV}-${env.GIT_SHA}"
 
-                    echo "Deploying to ${env.ENV} namespace with images:"
+                    echo "Deploying to ${env.NAMESPACE} namespace with images:"
                     echo "Backend: ${env.BACKEND_IMAGE}"
                     echo "Frontend: ${env.FRONTEND_IMAGE}"
                 }
