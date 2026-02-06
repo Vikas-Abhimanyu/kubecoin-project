@@ -24,6 +24,13 @@ spec:
                 name: kubecoin-config
             - secretRef:
                 name: kubecoin-secrets
+          resources:
+            requests:
+              cpu: "20m"
+              memory: "32Mi"
+            limits:
+              cpu: "40m"
+              memory: "64Mi"
       containers:
         - name: backend
           image: vikasabhimanyu/backend:latest
@@ -42,6 +49,4 @@ spec:
             limits:
               memory: "300Mi"
               cpu: "300m"
-
-
 
